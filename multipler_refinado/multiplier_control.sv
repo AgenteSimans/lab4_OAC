@@ -37,4 +37,83 @@ module multiplier_control (
 
     // Implemente o modulo aqui
 
+    typedef enum logic [3:0] {
+    IDLE    = 4'b0001,
+    LOAD    = 4'b0010,
+    COMPUTE = 4'b0100,
+    DONE    = 4'b1000
+    } state_t; //so fechando o enum de estados,faltava o [3:0].
+
+    state_t state, next_state;
+
+    // -----------------------------------------------------------------------
+    // Contador de iteracoes (0 a 31 → 32 iteracoes para 32 bits)
+    // -----------------------------------------------------------------------
+    logic [5:0] count;
+    logic       count_en;
+    logic       count_rst;
+    
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n)         count <= '0;
+        else if (count_rst) count <= '0;
+        else if (count_en)  count <= count + 6'd1;
+    end
+
+    // -----------------------------------------------------------------------
+    // Registrador de estado
+    // -----------------------------------------------------------------------
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) state <= IDLE;
+        else        state <= next_state;
+    end
+
+    
+    // -----------------------------------------------------------------------
+    // Logica de proximo estado
+    // -----------------------------------------------------------------------
+    always_comb begin
+        next_state = state;
+        case (state)
+            IDLE:        if (start)           next_state = LOAD;
+            LOAD:                             next_state = COMPUTE;
+            COMPUTE:     if (count == 6'd31)  next_state = DONE;
+                         else                 next_state = COMPUTE;
+            DONE:        if (!start)          next_state = IDLE;
+            default:                          next_state = IDLE; //failsafe?
+        endcase
+    end
+    
+    // -----------------------------------------------------------------------
+    // Logica de saida
+    // -----------------------------------------------------------------------
+    always_comb begin 
+        load       = 1'b0;
+        compute_en = 1'b0;
+        done       = 1'b0;
+        count_en   = 1'b0;
+        count_rst  = 1'b0;
+
+        case (state)
+            IDLE: begin
+                count_rst = 1'b1; // Mantem o contador em 0 enquanto ocioso
+            end
+
+            LOAD: begin
+                load      = 1'b1; // Carrega operandos no datapath
+                count_rst = 1'b1; // Reseta o contador
+            end
+            
+            COMPUTE: begin
+                compute_en = 1'b1;
+                count_en = (state == COMPUTE && count != 6'd31); //evita uma interacao extra apos 31 0->31=32
+            end
+
+            DONE: begin
+                done = 1'b1; // Sinaliza conclusao da multiplicacao
+            end
+            
+        endcase
+            
+    end
+
 endmodule
