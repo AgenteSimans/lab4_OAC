@@ -35,14 +35,20 @@ module multiplier_control (
     output logic compute_en   // Executa uma iteracao (add condicional + shift)
 );
 
-    // Implemente o modulo aqui
+    // -----------------------------------------------------------------------
+    // Definicao dos estados — codificacao one-hot
+    // Cada estado tem exatamente um bit em '1'; os demais sao '0'.
+    // Com 4 estados usamos 4 bits (um flip-flop por estado).
+    // Vantagem: logica de proximo estado e de saida simplificada
+    // (decodifica diretamente o bit do estado, sem comparador binario).
+    // -----------------------------------------------------------------------
 
-    typedef enum logic { 
-        IDLE    =    4'b0001,
-        LOAD    =    4'b0010,
-        COMPUTE =    4'b0100,
-        DONE    =    4'b1000
-    } state_t;
+    typedef enum logic [3:0] {
+    IDLE    = 4'b0001,
+    LOAD    = 4'b0010,
+    COMPUTE = 4'b0100,
+    DONE    = 4'b1000
+    } state_t; //so fechando o enum de estados,faltava o [3:0].
 
     state_t state, next_state;
 
@@ -52,7 +58,7 @@ module multiplier_control (
     logic [5:0] count;
     logic       count_en;
     logic       count_rst;
-
+    
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n)         count <= '0;
         else if (count_rst) count <= '0;
@@ -67,7 +73,6 @@ module multiplier_control (
         else        state <= next_state;
     end
 
-    
     // -----------------------------------------------------------------------
     // Logica de proximo estado
     // -----------------------------------------------------------------------
@@ -79,7 +84,7 @@ module multiplier_control (
             COMPUTE:     if (count == 6'd31)  next_state = DONE;
                          else                 next_state = COMPUTE;
             DONE:        if (!start)          next_state = IDLE;
-            default:                          next_state = IDLE;
+            default:                          next_state = IDLE; //failsafe?
         endcase
     end
     
@@ -105,7 +110,8 @@ module multiplier_control (
             
             COMPUTE: begin
                 compute_en = 1'b1;
-                count_en = 1'b1;
+                count_en = (count != 6'd31); // em always_comb, não se deve usar state como condição extra dentro de um case pois pode gerar pobrema
+                //count_en = (state == COMPUTE && count != 6'd31); //evita uma interacao extra apos 31 0->31=32
             end
 
             DONE: begin
